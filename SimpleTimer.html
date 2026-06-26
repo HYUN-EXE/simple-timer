@@ -1383,23 +1383,33 @@
     _loading = false;
   }
 
+  function isNewerVersion(remote, current) {
+    var r = remote.split('.').map(Number);
+    var c = current.split('.').map(Number);
+    for (var i = 0; i < Math.max(r.length, c.length); i++) {
+      var rv = r[i] || 0, cv = c[i] || 0;
+      if (rv > cv) return true;
+      if (rv < cv) return false;
+    }
+    return false;
+  }
+
   var _checkingUpdate = false;
 
   function checkForUpdates() {
-    if (_checkingUpdate) return;   // 중복 호출 방지
+    if (_checkingUpdate) return;
     _checkingUpdate = true;
     var ctrl = new AbortController();
-    var tid = setTimeout(function() { ctrl.abort(); }, 10000); // 10초 타임아웃
+    var tid = setTimeout(function() { ctrl.abort(); }, 10000);
     fetch(GITHUB_VERSION_URL + '?_=' + Date.now(), { signal: ctrl.signal })
       .then(function(r) { clearTimeout(tid); return r.json(); })
       .then(function(data) {
         _checkingUpdate = false;
-        if (data.version && data.version !== APP_VERSION) showUpdateToast(data.version);
+        if (data.version && isNewerVersion(data.version, APP_VERSION)) showUpdateToast(data.version);
       })
       .catch(function() {
         clearTimeout(tid);
         _checkingUpdate = false;
-        // 실패 시 조용히 무시 — 앱 동작에 영향 없음
       });
   }
 
