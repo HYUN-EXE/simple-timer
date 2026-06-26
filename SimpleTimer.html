@@ -1148,7 +1148,7 @@
     });
   }
 
-  const APP_VERSION = '2.1.1';
+  const APP_VERSION = '2.1.2';
   const STORAGE_KEY = 'hyunSimpleTimer_v1';
   const GITHUB_VERSION_URL = 'https://raw.githubusercontent.com/HYUN-EXE/simple-timer/main/version.json';
   const GITHUB_HTML_URL = 'https://hyun-exe.github.io/simple-timer/SimpleTimer.html';
@@ -1217,7 +1217,43 @@
   }
 
   function applyUpdate() {
-    window.location.href = GITHUB_HTML_URL + '?_v=' + Date.now();
+    var btn = document.querySelector('.btn-toast-now');
+    if (btn) { btn.textContent = '다운로드 중...'; btn.disabled = true; }
+
+    fetch(GITHUB_HTML_URL + '?_v=' + Date.now())
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        var blob = new Blob([html], { type: 'text/html' });
+
+        if (window.showSaveFilePicker) {
+          // Chrome/Edge: 저장 다이얼로그로 기존 파일 직접 덮어쓰기
+          window.showSaveFilePicker({
+            suggestedName: 'SimpleTimer.html',
+            types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }]
+          }).then(function(handle) {
+            return handle.createWritable().then(function(w) {
+              return w.write(blob).then(function() { return w.close(); });
+            });
+          }).then(function() {
+            window.location.reload();
+          }).catch(function() {
+            // 취소 시 GitHub Pages로 이동
+            window.location.href = GITHUB_HTML_URL;
+          });
+        } else {
+          // 폴백: 자동 다운로드 후 GitHub Pages로 이동
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url; a.download = 'SimpleTimer.html';
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          setTimeout(function() { window.location.href = GITHUB_HTML_URL; }, 800);
+        }
+      })
+      .catch(function() {
+        window.location.href = GITHUB_HTML_URL;
+      });
   }
 
   let volume = 0.70;
