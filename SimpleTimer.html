@@ -529,6 +529,88 @@
       padding: 24px 0;
     }
 
+    /* 임박 색상 경고 */
+    .dot.warning { background: #f59e0b; }
+    .dot.danger  { background: #ef4444; }
+    .progress-fill.warning { background: #f59e0b; }
+    .progress-fill.danger  { background: #ef4444; }
+    .stat-value.warning { color: #f59e0b; }
+    .stat-value.danger  { color: #ef4444; }
+    .timer-card.warning { border-color: #92400e; }
+    .timer-card.danger  { border-color: #991b1b; animation: blink-danger 1s infinite; }
+    @keyframes blink-danger {
+      0%, 100% { border-color: #991b1b; }
+      50%       { border-color: #ef4444; }
+    }
+
+    /* 완료 로그 */
+    .log-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    .log-box-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-card);
+    }
+    .log-box-title {
+      font-size: 12px;
+      color: var(--text-4);
+      font-weight: 500;
+    }
+    .btn-clear-log {
+      background: none;
+      border: none;
+      color: var(--text-5);
+      cursor: pointer;
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      transition: color 0.15s;
+      border-radius: 4px;
+    }
+    .btn-clear-log:hover { color: #ef4444; }
+    .log-entry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border-card);
+      font-size: 12px;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-5);
+      flex-shrink: 0;
+    }
+    .log-memo {
+      flex: 1;
+      color: var(--text-3);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .log-base {
+      color: var(--text-4);
+      flex-shrink: 0;
+      font-size: 11px;
+    }
+    .log-status {
+      color: var(--text-5);
+      flex-shrink: 0;
+      font-size: 11px;
+    }
+
     /* Changelog Modal */
     .modal-overlay {
       display: none;
@@ -719,6 +801,24 @@
   <div id="timerList">
     <div class="no-timers">등록된 타이머가 없습니다</div>
   </div>
+
+  <div id="logBox" style="display:none">
+    <div class="log-box">
+      <div class="log-box-header">
+        <span class="log-box-title">완료 로그</span>
+        <button class="btn-clear-log" onclick="clearExpiredTimers()" title="전체 삭제">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M9 6V4h6v2"/>
+          </svg>
+          전체 삭제
+        </button>
+      </div>
+      <div id="logList"></div>
+    </div>
+  </div>
 </main>
 
 <!-- Changelog Modal -->
@@ -741,6 +841,25 @@
       </button>
     </div>
     <div class="modal-body">
+
+      <div class="version-entry">
+        <div class="version-head">
+          <span class="version-tag">v2.2.0</span>
+          <span class="version-date">2026.06.25</span>
+        </div>
+        <ul class="version-changes">
+          <li>완료 타이머 로그 박스 분리 (메모 / 기준시각 / 종료됨) + 일괄 삭제</li>
+          <li>탭 제목에 가장 임박한 타이머 메모·남은 시간 표시</li>
+          <li>동일 종료 시각 타이머 2개 이상이면 3초마다 탭 제목 순환</li>
+          <li>임박 색상 경고 — 5분 이하 노랑, 1분 이하 빨강 + 테두리 점멸</li>
+          <li>메모/시간/분 입력 후 Enter 키로 바로 타이머 등록</li>
+          <li>GitHub 연결 실패·타임아웃 시 앱 정상 동작 보장 (버튼 자동 복구)</li>
+          <li>버그수정 — 페이지 로드 시 타이머·버튼 데이터 소실 가능 문제</li>
+          <li>버그수정 — 이미 지난 시각으로 타이머 등록 차단</li>
+          <li>버그수정 — AudioContext 누적 생성 미해제 (알림음 반복 실패 방지)</li>
+          <li>버그수정 — 임박 색상 경고 초기 렌더링 시 즉시 적용</li>
+        </ul>
+      </div>
 
       <div class="version-entry">
         <div class="version-head">
@@ -935,6 +1054,12 @@
       return;
     }
 
+    const endTime = calcEndTime(h, m, dur);
+    if (endTime <= new Date()) {
+      alert('종료 시각이 이미 지났습니다.\n기준 시각을 현재 시각 이후로 조정해주세요.');
+      return;
+    }
+
     timers.unshift({
       id: ++idCounter,
       memo,
@@ -1087,16 +1212,42 @@
     renderTimers();
   }
 
+  function renderExpiredLog() {
+    const expired = timers.filter(function(t) { return t.expired; });
+    const box = document.getElementById('logBox');
+    if (!box) return;
+    if (expired.length === 0) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    document.getElementById('logList').innerHTML = expired.map(function(t) {
+      return '<div class="log-entry">' +
+        '<div class="log-dot"></div>' +
+        '<span class="log-memo">' + esc(t.memo) + '</span>' +
+        '<span class="log-base">' + pad(t.baseH) + ':' + pad(t.baseM) + ' + ' + t.duration + '분</span>' +
+        '<span class="log-status">종료됨</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function clearExpiredTimers() {
+    for (var i = timers.length - 1; i >= 0; i--) {
+      if (timers[i].expired) timers.splice(i, 1);
+    }
+    saveState();
+    renderExpiredLog();
+  }
+
   function renderTimers() {
     const list = document.getElementById('timerList');
-    if (timers.length === 0) {
-      list.innerHTML = '<div class="no-timers">등록된 타이머가 없습니다</div>';
+    const active = timers.filter(function(t) { return !t.expired; });
+    if (active.length === 0) {
+      list.innerHTML = '<div class="no-timers">진행중인 타이머가 없습니다</div>';
       return;
     }
 
-    list.innerHTML = timers.map(t => {
+    list.innerHTML = active.map(t => {
       const rem = t.endTime - Date.now();
       const expired = rem <= 0;
+      const urgency = expired ? '' : rem < 60000 ? 'danger' : rem < 300000 ? 'warning' : '';
       const totalMs = t.duration * 60000;
       const elapsed = totalMs - Math.max(0, rem);
       const pct = expired ? 100 : Math.min(100, (elapsed / totalMs) * 100).toFixed(1);
@@ -1121,10 +1272,10 @@
            </button>`;
 
       return `
-        <div class="timer-card" id="tc-${t.id}">
+        <div class="timer-card${urgency ? ' ' + urgency : ''}" id="tc-${t.id}">
           <div class="timer-card-header">
             <div class="timer-name-row">
-              <div class="dot ${expired ? 'expired' : ''}" id="dot-${t.id}"></div>
+              <div class="dot${expired ? ' expired' : (urgency ? ' ' + urgency : '')}" id="dot-${t.id}"></div>
               ${nameContent}
             </div>
             <div class="timer-header-right">
@@ -1140,7 +1291,7 @@
             </div>
           </div>
           <div class="progress-bar">
-            <div class="progress-fill ${expired ? 'expired' : ''}" id="pf-${t.id}" style="width:${pct}%"></div>
+            <div class="progress-fill${expired ? ' expired' : (urgency ? ' ' + urgency : '')}" id="pf-${t.id}" style="width:${pct}%"></div>
           </div>
           <div class="timer-stats">
             <div>
@@ -1150,7 +1301,7 @@
                 </svg>
                 남은 시간
               </div>
-              <div class="stat-value ${expired ? 'expired-text' : ''}" id="rem-${t.id}">
+              <div class="stat-value${expired ? ' expired-text' : (urgency ? ' ' + urgency : '')}" id="rem-${t.id}">
                 ${expired ? '종료됨' : formatRemaining(rem)}
               </div>
             </div>
@@ -1175,13 +1326,16 @@
     });
   }
 
-  const APP_VERSION = '2.1.3';
+  const APP_VERSION = '2.2.0';
   const STORAGE_KEY = 'hyunSimpleTimer_v1';
   const GITHUB_VERSION_URL = 'https://raw.githubusercontent.com/HYUN-EXE/simple-timer/main/version.json';
   const GITHUB_RAW_HTML   = 'https://raw.githubusercontent.com/HYUN-EXE/simple-timer/main/SimpleTimer.html';
   const GITHUB_HTML_URL   = 'https://hyun-exe.github.io/simple-timer/SimpleTimer.html';
 
+  var _loading = false;
+
   function saveState() {
+    if (_loading) return;  // loadState 진행 중엔 저장 차단
     var state = {
       volume: Math.round(volume * 100),
       customButtons: customButtons.map(function(b) { return { minutes: b.minutes }; }),
@@ -1197,9 +1351,10 @@
   }
 
   function loadState() {
+    _loading = true;
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) { _loading = false; return; }
       var state = JSON.parse(raw);
       if (state.volume !== undefined) {
         volume = state.volume / 100;
@@ -1221,21 +1376,31 @@
             editing: false
           });
         });
-        idCounter = Math.max.apply(null, timers.map(function(t){ return t.id; }));
+        idCounter = Math.max.apply(null, timers.map(function(t){ return t.id || 0; }));
         renderTimers();
       }
     } catch(e) {}
+    _loading = false;
   }
 
+  var _checkingUpdate = false;
+
   function checkForUpdates() {
-    fetch(GITHUB_VERSION_URL + '?_=' + Date.now())
-      .then(function(r) { return r.json(); })
+    if (_checkingUpdate) return;   // 중복 호출 방지
+    _checkingUpdate = true;
+    var ctrl = new AbortController();
+    var tid = setTimeout(function() { ctrl.abort(); }, 10000); // 10초 타임아웃
+    fetch(GITHUB_VERSION_URL + '?_=' + Date.now(), { signal: ctrl.signal })
+      .then(function(r) { clearTimeout(tid); return r.json(); })
       .then(function(data) {
-        if (data.version && data.version !== APP_VERSION) {
-          showUpdateToast(data.version);
-        }
+        _checkingUpdate = false;
+        if (data.version && data.version !== APP_VERSION) showUpdateToast(data.version);
       })
-      .catch(function() {});
+      .catch(function() {
+        clearTimeout(tid);
+        _checkingUpdate = false;
+        // 실패 시 조용히 무시 — 앱 동작에 영향 없음
+      });
   }
 
   function showUpdateToast(newVersion) {
@@ -1248,13 +1413,20 @@
     var btn = document.querySelector('.btn-toast-now');
     if (btn) { btn.textContent = '다운로드 중...'; btn.disabled = true; }
 
-    fetch(GITHUB_RAW_HTML + '?_v=' + Date.now())
-      .then(function(r) { return r.text(); })
+    var ctrl = new AbortController();
+    var tid = setTimeout(function() { ctrl.abort(); }, 20000); // 20초 타임아웃
+
+    function restoreBtn(msg) {
+      clearTimeout(tid);
+      if (btn) { btn.textContent = msg || '업데이트 진행'; btn.disabled = false; }
+    }
+
+    fetch(GITHUB_RAW_HTML + '?_v=' + Date.now(), { signal: ctrl.signal })
+      .then(function(r) { clearTimeout(tid); return r.text(); })
       .then(function(html) {
         var blob = new Blob([html], { type: 'text/html' });
 
         if (window.showSaveFilePicker) {
-          // Chrome/Edge: 저장 다이얼로그로 기존 파일 직접 덮어쓰기
           window.showSaveFilePicker({
             suggestedName: 'SimpleTimer.html',
             types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }]
@@ -1265,11 +1437,9 @@
           }).then(function() {
             window.location.reload();
           }).catch(function() {
-            // 취소 시 GitHub Pages로 이동
-            window.location.href = GITHUB_HTML_URL;
+            restoreBtn(); // 저장 취소 시 버튼 복구 (앱 정상 유지)
           });
         } else {
-          // 폴백: 자동 다운로드 후 GitHub Pages로 이동
           var url = URL.createObjectURL(blob);
           var a = document.createElement('a');
           a.href = url; a.download = 'SimpleTimer.html';
@@ -1280,7 +1450,7 @@
         }
       })
       .catch(function() {
-        window.location.href = GITHUB_HTML_URL;
+        restoreBtn('재시도'); // GitHub 연결 실패 — 버튼 복구 후 재시도 가능
       });
   }
 
@@ -1324,6 +1494,7 @@
       tone(1100, 0.81, 0.22);
       tone(880,  1.2,  0.4);
       tone(1100, 1.65, 0.4);
+      setTimeout(function() { try { ctx.close(); } catch(e) {} }, 2500);
     } catch(e) {}
   }
 
@@ -1354,6 +1525,40 @@
     document.getElementById('modalOverlay').classList.remove('open');
   }
 
+  var _tabIdx = 0, _tabTick = 0;
+
+  function updateTabTitle() {
+    var active = timers.filter(function(t) { return !t.expired; });
+    if (active.length === 0) {
+      document.title = "Hyun's Simple Timer";
+      _tabIdx = 0; _tabTick = 0;
+      return;
+    }
+    var now = Date.now();
+    active.sort(function(a, b) { return a.endTime - b.endTime; });
+
+    // 가장 임박한 타이머와 동일 표시 시간인 것들 묶기
+    var minStr = formatRemaining(active[0].endTime - now);
+    var tied = active.filter(function(t) {
+      return formatRemaining(t.endTime - now) === minStr;
+    });
+
+    var t;
+    if (tied.length <= 1) {
+      // 단독 1위 — 고정 표시
+      t = active[0];
+      _tabIdx = 0; _tabTick = 0;
+    } else {
+      // 동률 — 3초마다 순환
+      _tabIdx = _tabIdx % tied.length;
+      t = tied[_tabIdx];
+      _tabTick++;
+      if (_tabTick >= 3) { _tabTick = 0; _tabIdx = (_tabIdx + 1) % tied.length; }
+    }
+
+    document.title = '[' + formatRemaining(t.endTime - Date.now()) + '] ' + t.memo;
+  }
+
   function tick() {
     const now = Date.now();
     const d = new Date(now);
@@ -1370,38 +1575,37 @@
       if (rem <= 0 && !t.expired) {
         t.expired = true;
         needFullRender = true;
-        if (!t.notified) {
-          t.notified = true;
-          playBeep();
-        }
+        if (!t.notified) { t.notified = true; playBeep(); }
       }
 
       if (!t.expired) running++;
 
-      const remEl = document.getElementById(`rem-${t.id}`);
-      const dotEl = document.getElementById(`dot-${t.id}`);
-      const pfEl  = document.getElementById(`pf-${t.id}`);
+      const remEl  = document.getElementById(`rem-${t.id}`);
+      const dotEl  = document.getElementById(`dot-${t.id}`);
+      const pfEl   = document.getElementById(`pf-${t.id}`);
+      const cardEl = document.getElementById(`tc-${t.id}`);
+
+      const urgency = t.expired ? '' : rem < 60000 ? 'danger' : rem < 300000 ? 'warning' : '';
 
       if (remEl) {
-        if (t.expired) {
-          remEl.textContent = '종료됨';
-          remEl.className = 'stat-value expired-text';
-        } else {
-          remEl.textContent = formatRemaining(rem);
-        }
+        if (t.expired) { remEl.textContent = '종료됨'; remEl.className = 'stat-value expired-text'; }
+        else { remEl.textContent = formatRemaining(rem); remEl.className = 'stat-value' + (urgency ? ' ' + urgency : ''); }
       }
-      if (dotEl) dotEl.className = `dot ${t.expired ? 'expired' : ''}`;
+      if (dotEl) dotEl.className = 'dot' + (t.expired ? ' expired' : (urgency ? ' ' + urgency : ''));
       if (pfEl && !t.expired) {
         const totalMs = t.duration * 60000;
         const pct = Math.min(100, ((totalMs - Math.max(0, rem)) / totalMs) * 100).toFixed(1);
+        pfEl.className = 'progress-fill' + (urgency ? ' ' + urgency : '');
         pfEl.style.width = pct + '%';
       }
+      if (cardEl && !t.expired) cardEl.className = 'timer-card' + (urgency ? ' ' + urgency : '');
     });
 
     document.getElementById('runningBadge').textContent = `${running}개 진행중`;
 
-    if (needFullRender) renderTimers();
+    if (needFullRender) { renderTimers(); renderExpiredLog(); }
 
+    updateTabTitle();
     updatePreview();
   }
 
@@ -1417,9 +1621,14 @@
     }
   });
 
-  ['inputHour', 'inputMinute', 'inputDuration'].forEach(id =>
-    document.getElementById(id).addEventListener('input', updatePreview)
-  );
+  ['inputHour', 'inputMinute', 'inputDuration'].forEach(id => {
+    var el = document.getElementById(id);
+    el.addEventListener('input', updatePreview);
+    el.addEventListener('keydown', function(e) { if (e.key === 'Enter') addTimer(); });
+  });
+  document.getElementById('inputMemo').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') addTimer();
+  });
 
   const now = new Date();
   document.getElementById('inputHour').value = now.getHours();
@@ -1428,6 +1637,7 @@
   loadTheme();
   loadState();
   if (!customButtons.length) renderCustomButtons();
+  renderExpiredLog();
   document.getElementById('headerVersion').textContent = 'v' + APP_VERSION;
   checkForUpdates();
   setInterval(checkForUpdates, 300000);
